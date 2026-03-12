@@ -1,14 +1,12 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from datetime import timedelta, datetime
 from typing import List
 import logging
-import os
 
 from app.models import *
-from app.database import users_db, budget_requests_db, activity_logs_db, SUPER_ADMIN, SAMPLE_ADMIN  
+from app.database import users_db, budget_requests_db, activity_logs_db, SUPER_ADMIN, SAMPLE_ADMIN
 from app.auth import (
     authenticate_user, create_access_token, get_password_hash,
     get_current_active_user, get_admin_user, get_super_admin,
@@ -22,34 +20,8 @@ logger = logging.getLogger(__name__)
 # ====== CREATE FASTAPI APP ======
 app = FastAPI(title="Budget Request System", version="2.0.0")
 
-# ====== DETECT ENVIRONMENT ======
-on_vercel = os.environ.get('VERCEL', False) or os.path.exists('/var/task')
-logger.info(f"Running on Vercel: {on_vercel}")
-
 # ====== MOUNT STATIC FILES ======
-try:
-    if on_vercel:
-        # On Vercel, files are at /var/task/
-        vercel_static_path = '/var/task/app/static'
-        if os.path.exists(vercel_static_path):
-            app.mount("/static", StaticFiles(directory=vercel_static_path), name="static")
-            logger.info(f"✅ Static files mounted from Vercel path: {vercel_static_path}")
-        else:
-            # Fallback to relative path
-            app.mount("/static", StaticFiles(directory="app/static"), name="static")
-            logger.info("⚠️ Static files mounted from app/static (fallback)")
-    else:
-        # Local development
-        if os.path.exists("app/static"):
-            app.mount("/static", StaticFiles(directory="app/static"), name="static")
-            logger.info("✅ Static files mounted from app/static (local)")
-        elif os.path.exists("static"):
-            app.mount("/static", StaticFiles(directory="static"), name="static")
-            logger.info("✅ Static files mounted from static (local)")
-        else:
-            logger.warning("❌ No static directory found!")
-except Exception as e:
-    logger.error(f"Error mounting static files: {e}")
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # ====== CORS MIDDLEWARE ======
 app.add_middleware(
@@ -63,19 +35,6 @@ app.add_middleware(
 # ====== STARTUP EVENT ======
 @app.on_event("startup")
 async def startup_event():
-    # Log directory structure on startup
-    logger.info(f"Current directory: {os.getcwd()}")
-    logger.info(f"Files in current directory: {os.listdir('.')}")
-    
-    if os.path.exists('app'):
-        logger.info(f"Files in app: {os.listdir('app')}")
-    
-    if os.path.exists('app/static'):
-        logger.info(f"Files in app/static: {os.listdir('app/static')}")
-    
-    if os.path.exists('/var/task'):
-        logger.info(f"Files in /var/task: {os.listdir('/var/task')[:10]}")  # First 10 files
-    
     # Create super admin if not exists
     if "superadmin" not in users_db:
         super_admin = User(
@@ -95,7 +54,7 @@ async def startup_event():
         )
         users_db[super_admin.username] = super_admin
         logger.info("Super admin user created")
-
+    
     # Create regular admin if not exists
     if "admin" not in users_db:
         admin_user = User(
@@ -117,153 +76,60 @@ async def startup_event():
         )
         users_db[admin_user.username] = admin_user
         logger.info("Sample admin user created")
+    
+    # Add sample requesters for testing (optional - remove in production)
+    sample_requesters = [
+        {
+            "username": "requester1",
+            "password": "password123",
+            "full_name": "John Doe",
+            "email": "john.doe@company.com",
+            "campus": "Main Campus",
+            "department": "Engineering",
+            "position": "Software Engineer",
+            "employee_id": "EMP-001",
+            "contact_number": "09123456789"
+        },
+        {
+            "username": "requester2",
+            "password": "password123",
+            "full_name": "Jane Smith",
+            "email": "jane.smith@company.com",
+            "campus": "North Campus",
+            "department": "Marketing",
+            "position": "Marketing Specialist",
+            "employee_id": "EMP-002",
+            "contact_number": "09234567890"
+        }
+    ]
+    
+    for req in sample_requesters:
+        if req["username"] not in users_db:
+            new_requester = User(
+                username=req["username"],
+                email=req["email"],
+                password_hash=get_password_hash(req["password"]),
+                role=UserRole.REQUESTER,
+                status=UserStatus.ACTIVE,  # Auto-approved for testing
+                full_name=req["full_name"],
+                campus=req["campus"],
+                department=req["department"],
+                employee_id=req["employee_id"],
+                position=req["position"],
+                contact_number=req["contact_number"],
+                created_at=datetime.now(),
+                approved_at=datetime.now()
+            )
+            users_db[new_requester.username] = new_requester
+            logger.info(f"Sample requester created: {req['username']}")
 
-# ====== DEBUG ENDPOINT ======
-@app.get("/debug-files")
-async def debug_files():
-    """Debug endpoint to see what files are available"""
-    result = {
-        "environment": "vercel" if on_vercel else "local",
-        "current_directory": os.getcwd(),
-        "files_in_current": os.listdir('.'),
-    }
-    
-    # Check if app folder exists
-    if os.path.exists('app'):
-        result["app_exists"] = True
-        result["files_in_app"] = os.listdir('app')
-    else:
-        result["app_exists"] = False
-    
-    # Check if static folder exists in app
-    if os.path.exists('app/static'):
-        result["static_in_app_exists"] = True
-        result["files_in_app_static"] = os.listdir('app/static')
-    else:
-        result["static_in_app_exists"] = False
-    
-    # Check /var/task path (Vercel)
-    if os.path.exists('/var/task'):
-        result["var_task_exists"] = True
-        result["files_in_var_task"] = os.listdir('/var/task')[:20]  # First 20 files
-    
-    if os.path.exists('/var/task/app/static'):
-        result["var_task_static_exists"] = True
-        result["files_in_var_task_static"] = os.listdir('/var/task/app/static')
-    
-    return JSONResponse(content=result)
-
-# ====== PAGE ROUTES (HTML) ======
-
-def find_html_file(filename):
-    """Helper function to find HTML files in various possible locations"""
-    possible_paths = []
-    
-    # Add paths based on environment
-    if on_vercel:
-        possible_paths.append(f'/var/task/app/static/{filename}')
-        possible_paths.append(f'/var/task/static/{filename}')
-    
-    # Relative paths
-    possible_paths.append(f'app/static/{filename}')
-    possible_paths.append(f'static/{filename}')
-    possible_paths.append(os.path.join('app', 'static', filename))
-    possible_paths.append(os.path.join(os.getcwd(), 'app', 'static', filename))
-    
-    for path in possible_paths:
-        if os.path.exists(path):
-            logger.info(f"Found {filename} at: {path}")
-            return path
-    
-    logger.warning(f"Could not find {filename} in any location")
-    return None
-
-@app.get("/", response_class=HTMLResponse)
+# ====== ROOT ENDPOINT ======
+@app.get("/")
 async def root():
-    """Serve the login page"""
-    html_path = find_html_file("login.html")
-    
-    if html_path:
-        with open(html_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
-        return HTMLResponse(content=html_content)
-    
-    # If no file found, return helpful error
-    error_html = f"""
-    <html>
-        <head><title>Error</title></head>
-        <body style="font-family: Arial; padding: 20px;">
-            <h1>🔍 Login page not found</h1>
-            <p><strong>Environment:</strong> {"Vercel" if on_vercel else "Local"}</p>
-            <p><strong>Current directory:</strong> {os.getcwd()}</p>
-            <p><strong>Files in current:</strong> {os.listdir('.')}</p>
-            <p><strong>app exists:</strong> {os.path.exists('app')}</p>
-            <p><strong>app/static exists:</strong> {os.path.exists('app/static')}</p>
-            <p><strong>/var/task exists:</strong> {os.path.exists('/var/task')}</p>
-            <hr>
-            <p><a href="/debug-files">View detailed debug info</a></p>
-            <p><a href="/health">Check API health</a></p>
-            <p><a href="/api">View API endpoints</a></p>
-        </body>
-    </html>
-    """
-    return HTMLResponse(content=error_html, status_code=500)
-
-@app.get("/login", response_class=HTMLResponse)
-async def login_page():
-    """Serve the login page"""
-    html_path = find_html_file("login.html")
-    
-    if html_path:
-        with open(html_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
-        return HTMLResponse(content=html_content)
-    
-    return HTMLResponse(content="<h1>Login page not found</h1><p><a href='/debug-files'>Debug</a></p>", status_code=404)
-
-@app.get("/requester-dashboard", response_class=HTMLResponse)
-async def requester_page():
-    """Serve the requester dashboard page"""
-    html_path = find_html_file("requester.html")
-    
-    if html_path:
-        with open(html_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
-        return HTMLResponse(content=html_content)
-    
-    return HTMLResponse(content="<h1>Requester page not found</h1><p><a href='/debug-files'>Debug</a></p>", status_code=404)
-
-@app.get("/admin-dashboard", response_class=HTMLResponse)
-async def admin_page():
-    """Serve the admin dashboard page"""
-    html_path = find_html_file("admin.html")
-    
-    if html_path:
-        with open(html_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
-        return HTMLResponse(content=html_content)
-    
-    return HTMLResponse(content="<h1>Admin page not found</h1><p><a href='/debug-files'>Debug</a></p>", status_code=404)
-
-# ====== API ROOT (JSON) ======
-@app.get("/api")
-async def api_root():
-    """API root endpoint - returns JSON"""
     return {
         "message": "Budget Request System API",
         "version": "2.0.0",
-        "status": "running",
-        "environment": "vercel" if on_vercel else "local",
-        "endpoints": {
-            "docs": "/docs",
-            "health": "/health",
-            "stats": "/stats",
-            "auth": "/token",
-            "debug": "/debug-files",
-            "login_page": "/login",
-            "requester": "/requester-dashboard",
-            "admin": "/admin-dashboard"
-        }
+        "status": "running"
     }
 
 # ====== AUTHENTICATION ENDPOINTS ======
@@ -279,15 +145,15 @@ async def login(user_login: UserLogin, request: Request):
             detail="Incorrect username or password or account not active",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
+    
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username, "user_id": user.id, "role": user.role.value},
         expires_delta=access_token_expires
     )
-
+    
     logger.info(f"User {user.username} logged in successfully")
-
+    
     return Token(
         access_token=access_token,
         token_type="bearer",
@@ -303,13 +169,13 @@ async def register(user_data: UserCreate, request: Request):
     """Register a new requester account"""
     if user_data.username in users_db:
         raise HTTPException(status_code=400, detail="Username already exists")
-
+    
     for user in users_db.values():
         if user.email == user_data.email:
             raise HTTPException(status_code=400, detail="Email already exists")
         if user_data.employee_id and user.employee_id == user_data.employee_id:
             raise HTTPException(status_code=400, detail="Employee ID already exists")
-
+    
     new_user = User(
         username=user_data.username,
         email=user_data.email,
@@ -324,7 +190,7 @@ async def register(user_data: UserCreate, request: Request):
         contact_number=user_data.contact_number,
         created_at=datetime.now()
     )
-
+    
     users_db[new_user.username] = new_user
     logger.info(f"New user registered: {new_user.username} from {new_user.campus}")
     return new_user
@@ -351,13 +217,13 @@ async def approve_user(approval: UserApproval, admin: User = Depends(get_admin_u
         if u.id == approval.user_id:
             user = u
             break
-
+    
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
+    
     if user.role == UserRole.ADMIN:
-        raise HTTPException(status_code=400, detail="Use admin management for admin accounts")      
-
+        raise HTTPException(status_code=400, detail="Use admin management for admin accounts")
+    
     if approval.approved:
         user.status = UserStatus.ACTIVE
         user.role = approval.role if approval.role else UserRole.REQUESTER
@@ -370,10 +236,10 @@ async def approve_user(approval: UserApproval, admin: User = Depends(get_admin_u
         user.approved_at = datetime.now()
         user.comments = approval.comments
         message = "User rejected"
-
+    
     user.updated_at = datetime.now()
     user.updated_by = admin.username
-
+    
     logger.info(f"User {user.username} {message.lower()}")
     return {"message": message, "user": user}
 
@@ -384,17 +250,17 @@ async def get_all_admins(current_user: User = Depends(get_super_admin)):
     return admins
 
 @app.post("/admin/create", response_model=User)
-async def create_admin(admin_data: AdminCreate, current_user: User = Depends(get_super_admin)):     
+async def create_admin(admin_data: AdminCreate, current_user: User = Depends(get_super_admin)):
     """Create a new admin (super admin only)"""
     if admin_data.username in users_db:
         raise HTTPException(status_code=400, detail="Username already exists")
-
+    
     for user in users_db.values():
         if user.email == admin_data.email:
             raise HTTPException(status_code=400, detail="Email already exists")
         if user.employee_id == admin_data.employee_id:
             raise HTTPException(status_code=400, detail="Employee ID already exists")
-
+    
     new_admin = User(
         username=admin_data.username,
         email=admin_data.email,
@@ -412,7 +278,7 @@ async def create_admin(admin_data: AdminCreate, current_user: User = Depends(get
         approved_at=datetime.now(),
         approved_by=current_user.username
     )
-
+    
     users_db[new_admin.username] = new_admin
     logger.info(f"New admin created: {new_admin.username} by {current_user.username}")
     return new_admin
@@ -422,18 +288,18 @@ async def deactivate_admin(username: str, current_user: User = Depends(get_super
     """Deactivate an admin account (super admin only)"""
     if username not in users_db:
         raise HTTPException(status_code=404, detail="Admin not found")
-
+    
     admin = users_db[username]
     if admin.role != UserRole.ADMIN:
         raise HTTPException(status_code=400, detail="User is not an admin")
-
+    
     if username == current_user.username:
         raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
-
+    
     admin.status = UserStatus.INACTIVE
     admin.updated_at = datetime.now()
     admin.updated_by = current_user.username
-
+    
     logger.info(f"Admin {username} deactivated by {current_user.username}")
     return {"message": f"Admin {username} deactivated successfully"}
 
@@ -442,19 +308,19 @@ async def update_user(username: str, update_data: UserUpdate, current_user: User
     """Update user information"""
     if username not in users_db:
         raise HTTPException(status_code=404, detail="User not found")
-
+    
     user = users_db[username]
-
+    
     if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN] and current_user.username != username:
         raise HTTPException(status_code=403, detail="Cannot update other users")
-
+    
     update_dict = update_data.dict(exclude_unset=True)
     for field, value in update_dict.items():
         setattr(user, field, value)
-
+    
     user.updated_at = datetime.now()
     user.updated_by = current_user.username
-
+    
     return user
 
 @app.post("/users/change-password")
@@ -462,7 +328,7 @@ async def change_password(password_change: PasswordChange, current_user: User = 
     """Change user password"""
     if not change_user_password(current_user, password_change.old_password, password_change.new_password):
         raise HTTPException(status_code=400, detail="Incorrect old password")
-
+    
     return {"message": "Password changed successfully"}
 
 @app.get("/me", response_model=User)
@@ -477,7 +343,7 @@ async def create_request(request_data: BudgetRequestCreate, current_user: User =
     """Create a new budget request (requester only)"""
     if current_user.role != UserRole.REQUESTER:
         raise HTTPException(status_code=403, detail="Only requesters can create requests")
-
+    
     new_request = BudgetRequest(
         **request_data.dict(),
         requester_id=current_user.id,
@@ -486,7 +352,7 @@ async def create_request(request_data: BudgetRequestCreate, current_user: User =
         campus=current_user.campus,
         department=current_user.department
     )
-
+    
     budget_requests_db[new_request.id] = new_request
     logger.info(f"New budget request created: {new_request.id} by {current_user.username}")
     return new_request
@@ -494,7 +360,7 @@ async def create_request(request_data: BudgetRequestCreate, current_user: User =
 @app.get("/requests/my", response_model=List[BudgetRequest])
 async def get_my_requests(current_user: User = Depends(get_current_active_user)):
     """Get current user's budget requests"""
-    user_requests = [r for r in budget_requests_db.values() if r.requester_id == current_user.id]   
+    user_requests = [r for r in budget_requests_db.values() if r.requester_id == current_user.id]
     user_requests.sort(key=lambda x: x.created_at, reverse=True)
     return user_requests
 
@@ -517,7 +383,7 @@ async def review_request(request_id: str, review: BudgetRequestReview, admin: Us
     """Approve or reject a budget request (admin only)"""
     if request_id not in budget_requests_db:
         raise HTTPException(status_code=404, detail="Request not found")
-
+    
     request = budget_requests_db[request_id]
     request.status = review.status
     request.comments = review.comments
@@ -526,7 +392,7 @@ async def review_request(request_id: str, review: BudgetRequestReview, admin: Us
     request.reviewed_by = admin.username
     request.reviewed_at = datetime.now()
     request.updated_at = datetime.now()
-
+    
     if review.status == RequestStatus.APPROVED:
         request.approved_by = admin.username
         request.approved_at = datetime.now()
@@ -538,24 +404,24 @@ async def review_request(request_id: str, review: BudgetRequestReview, admin: Us
     elif review.status == RequestStatus.IN_REVIEW:
         request.progress = 50
         message = "Request in review"
-
+    
     logger.info(f"{message}: {request_id} by {admin.username}")
     return {"message": message, "request": request}
 
 @app.delete("/requests/{request_id}")
-async def delete_request(request_id: str, current_user: User = Depends(get_current_active_user)):   
+async def delete_request(request_id: str, current_user: User = Depends(get_current_active_user)):
     """Delete a budget request"""
     if request_id not in budget_requests_db:
         raise HTTPException(status_code=404, detail="Request not found")
-
+    
     request = budget_requests_db[request_id]
-
+    
     if current_user.role == UserRole.REQUESTER:
         if request.requester_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not your request")
         if request.status not in [RequestStatus.PENDING, RequestStatus.REJECTED]:
             raise HTTPException(status_code=400, detail="Can only delete pending or rejected requests")
-
+    
     del budget_requests_db[request_id]
     return {"message": "Request deleted successfully"}
 
@@ -564,19 +430,19 @@ async def update_request(request_id: str, update_data: BudgetRequestUpdate, curr
     """Update a budget request"""
     if request_id not in budget_requests_db:
         raise HTTPException(status_code=404, detail="Request not found")
-
+    
     request = budget_requests_db[request_id]
-
+    
     if current_user.role == UserRole.REQUESTER:
         if request.requester_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not your request")
         if request.status != RequestStatus.PENDING:
             raise HTTPException(status_code=400, detail="Can only update pending requests")
-
+    
     update_dict = update_data.dict(exclude_unset=True)
     for field, value in update_dict.items():
         setattr(request, field, value)
-
+    
     request.updated_at = datetime.now()
     return request
 
@@ -587,17 +453,17 @@ async def get_stats(admin: User = Depends(get_admin_user)):
     """Get system statistics (admin only)"""
     total_requests = len(budget_requests_db)
     total_users = len(users_db)
-
+    
     active_users = len([u for u in users_db.values() if u.status == UserStatus.ACTIVE])
     pending_users = len([u for u in users_db.values() if u.status == UserStatus.PENDING])
     admin_count = len([u for u in users_db.values() if u.role == UserRole.ADMIN])
     requester_count = len([u for u in users_db.values() if u.role == UserRole.REQUESTER])
-
+    
     campus_stats = {}
     for user in users_db.values():
         if user.status == UserStatus.ACTIVE:
             campus_stats[user.campus] = campus_stats.get(user.campus, 0) + 1
-
+    
     if total_requests == 0:
         request_stats = {"message": "No requests found"}
     else:
@@ -605,13 +471,13 @@ async def get_stats(admin: User = Depends(get_admin_user)):
         category_totals = {}
         campus_request_stats = {}
         total_amount = 0
-
+        
         for request in budget_requests_db.values():
-            status_counts[request.status.value] = status_counts.get(request.status.value, 0) + 1    
+            status_counts[request.status.value] = status_counts.get(request.status.value, 0) + 1
             category_totals[request.category.value] = category_totals.get(request.category.value, 0) + request.amount
-            campus_request_stats[request.campus] = campus_request_stats.get(request.campus, 0) + 1  
+            campus_request_stats[request.campus] = campus_request_stats.get(request.campus, 0) + 1
             total_amount += request.amount
-
+        
         request_stats = {
             "total_requests": total_requests,
             "total_amount": total_amount,
@@ -620,7 +486,7 @@ async def get_stats(admin: User = Depends(get_admin_user)):
             "category_breakdown": category_totals,
             "campus_breakdown": campus_request_stats
         }
-
+    
     return {
         "users": {
             "total": total_users,
@@ -648,6 +514,5 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "users": len(users_db),
         "requests": len(budget_requests_db),
-        "version": "2.0.0",
-        "environment": "vercel" if on_vercel else "local"
+        "version": "2.0.0"
     }

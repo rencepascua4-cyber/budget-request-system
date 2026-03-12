@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from datetime import timedelta, datetime
 from typing import List
 import logging
@@ -23,7 +23,19 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Budget Request System", version="2.0.0")
 
 # ====== MOUNT STATIC FILES ======
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# Try different paths for static files
+static_paths = ["app/static", "static"]
+mounted = False
+
+for path in static_paths:
+    if os.path.exists(path):
+        app.mount("/static", StaticFiles(directory=path), name="static")
+        logger.info(f"Static files mounted from {path}")
+        mounted = True
+        break
+
+if not mounted:
+    logger.warning("Could not mount static files - no static directory found")
 
 # ====== CORS MIDDLEWARE ======
 app.add_middleware(
@@ -79,47 +91,134 @@ async def startup_event():
         users_db[admin_user.username] = admin_user
         logger.info("Sample admin user created")
 
+# ====== DEBUG ENDPOINT - ADD THIS ======
+@app.get("/debug-files")
+async def debug_files():
+    """Debug endpoint to see what files are available"""
+    import os
+    
+    result = {
+        "current_directory": os.getcwd(),
+        "files_in_current": os.listdir('.'),
+        "env_vars": {k: v for k, v in os.environ.items() if "PATH" in k or "DIR" in k}
+    }
+    
+    # Check if app folder exists
+    if os.path.exists('app'):
+        result["app_exists"] = True
+        result["files_in_app"] = os.listdir('app')
+    else:
+        result["app_exists"] = False
+    
+    # Check if static folder exists in app
+    if os.path.exists('app/static'):
+        result["static_in_app_exists"] = True
+        result["files_in_app_static"] = os.listdir('app/static')
+    else:
+        result["static_in_app_exists"] = False
+    
+    # Check if static folder exists in root
+    if os.path.exists('static'):
+        result["root_static_exists"] = True
+        result["files_in_root_static"] = os.listdir('static')
+    else:
+        result["root_static_exists"] = False
+    
+    return JSONResponse(content=result)
+
 # ====== PAGE ROUTES (HTML) ======
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve the login page"""
-    html_path = os.path.join("app", "static", "login.html")
-    try:
-        with open(html_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
-        return HTMLResponse(content=html_content)
-    except FileNotFoundError:
-        return {
-            "message": "Budget Request System API",
-            "version": "2.0.0", 
-            "status": "running",
-            "note": "Frontend files not found"
-        }
+    # Try multiple possible paths
+    possible_paths = [
+        os.path.join("app", "static", "login.html"),
+        os.path.join("static", "login.html"),
+        "static/login.html",
+        "app/static/login.html",
+        os.path.join(os.getcwd(), "app", "static", "login.html"),
+        os.path.join(os.getcwd(), "static", "login.html")
+    ]
+    
+    for html_path in possible_paths:
+        if os.path.exists(html_path):
+            logger.info(f"Found login.html at: {html_path}")
+            with open(html_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+            return HTMLResponse(content=html_content)
+    
+    # If no file found, return helpful error
+    error_html = f"""
+    <html>
+        <head><title>Error</title></head>
+        <body style="font-family: Arial; padding: 20px;">
+            <h1>🔍 Frontend files not found</h1>
+            <p>Current directory: {os.getcwd()}</p>
+            <p>Files in current directory: {os.listdir('.')}</p>
+            <p>Files in ./app: {os.listdir('app') if os.path.exists('app') else 'app folder not found'}</p>
+            <p>Files in ./app/static: {os.listdir('app/static') if os.path.exists('app/static') else 'static folder not found'}</p>
+            <p>Files in ./static: {os.listdir('static') if os.path.exists('static') else 'root static folder not found'}</p>
+            <hr>
+            <p><a href="/debug-files">View detailed debug info</a></p>
+        </body>
+    </html>
+    """
+    return HTMLResponse(content=error_html, status_code=500)
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
     """Serve the login page"""
-    html_path = os.path.join("app", "static", "login.html")
-    with open(html_path, "r", encoding="utf-8") as f:
-        html_content = f.read()
-    return HTMLResponse(content=html_content)
+    possible_paths = [
+        os.path.join("app", "static", "login.html"),
+        os.path.join("static", "login.html"),
+        "static/login.html",
+        "app/static/login.html"
+    ]
+    
+    for html_path in possible_paths:
+        if os.path.exists(html_path):
+            with open(html_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+            return HTMLResponse(content=html_content)
+    
+    return HTMLResponse(content="<h1>Login page not found</h1>", status_code=404)
 
 @app.get("/requester-dashboard", response_class=HTMLResponse)
 async def requester_page():
     """Serve the requester dashboard page"""
-    html_path = os.path.join("app", "static", "requester.html")
-    with open(html_path, "r", encoding="utf-8") as f:
-        html_content = f.read()
-    return HTMLResponse(content=html_content)
+    possible_paths = [
+        os.path.join("app", "static", "requester.html"),
+        os.path.join("static", "requester.html"),
+        "static/requester.html",
+        "app/static/requester.html"
+    ]
+    
+    for html_path in possible_paths:
+        if os.path.exists(html_path):
+            with open(html_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+            return HTMLResponse(content=html_content)
+    
+    return HTMLResponse(content="<h1>Requester page not found</h1>", status_code=404)
 
 @app.get("/admin-dashboard", response_class=HTMLResponse)
 async def admin_page():
     """Serve the admin dashboard page"""
-    html_path = os.path.join("app", "static", "admin.html")
-    with open(html_path, "r", encoding="utf-8") as f:
-        html_content = f.read()
-    return HTMLResponse(content=html_content)
+    possible_paths = [
+        os.path.join("app", "static", "admin.html"),
+        os.path.join("static", "admin.html"),
+        "static/admin.html",
+        "app/static/admin.html"
+    ]
+    
+    for html_path in possible_paths:
+        if os.path.exists(html_path):
+            with open(html_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+            return HTMLResponse(content=html_content)
+    
+    return HTMLResponse(content="<h1>Admin page not found</h1>", status_code=404)
 
 # ====== API ROOT (JSON) ======
 @app.get("/api")
@@ -133,7 +232,8 @@ async def api_root():
             "docs": "/docs",
             "health": "/health",
             "stats": "/stats",
-            "auth": "/token"
+            "auth": "/token",
+            "debug": "/debug-files"
         }
     }
 

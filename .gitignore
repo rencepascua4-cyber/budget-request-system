@@ -1,0 +1,10 @@
+# Create a .gitignore file
+echo "# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# VS Code
+.vscode/
+" > .gitignore

@@ -77,51 +77,8 @@ async def startup_event():
         users_db[admin_user.username] = admin_user
         logger.info("Sample admin user created")
     
-    # Add sample requesters for testing (optional - remove in production)
-    sample_requesters = [
-        {
-            "username": "requester1",
-            "password": "password123",
-            "full_name": "John Doe",
-            "email": "john.doe@company.com",
-            "campus": "Main Campus",
-            "department": "Engineering",
-            "position": "Software Engineer",
-            "employee_id": "EMP-001",
-            "contact_number": "09123456789"
-        },
-        {
-            "username": "requester2",
-            "password": "password123",
-            "full_name": "Jane Smith",
-            "email": "jane.smith@company.com",
-            "campus": "North Campus",
-            "department": "Marketing",
-            "position": "Marketing Specialist",
-            "employee_id": "EMP-002",
-            "contact_number": "09234567890"
-        }
-    ]
-    
-    for req in sample_requesters:
-        if req["username"] not in users_db:
-            new_requester = User(
-                username=req["username"],
-                email=req["email"],
-                password_hash=get_password_hash(req["password"]),
-                role=UserRole.REQUESTER,
-                status=UserStatus.ACTIVE,  # Auto-approved for testing
-                full_name=req["full_name"],
-                campus=req["campus"],
-                department=req["department"],
-                employee_id=req["employee_id"],
-                position=req["position"],
-                contact_number=req["contact_number"],
-                created_at=datetime.now(),
-                approved_at=datetime.now()
-            )
-            users_db[new_requester.username] = new_requester
-            logger.info(f"Sample requester created: {req['username']}")
+    # NO SAMPLE REQUESTERS - THEY'RE GONE FOREVER! 💀
+    logger.info("Startup complete - Only superadmin and admin exist")
 
 # ====== ROOT ENDPOINT ======
 @app.get("/")

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budget System - Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #FF0000 0%, #FFFFFF 50%, #0000FF 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+            border: 3px solid #FF0000;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #FF0000 0%, #0000FF 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-bottom: 3px solid #FFFFFF;
+        }
+        
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #FF0000;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            background: #f8f9fa;
+            transition: all 0.3s;
+            font-weight: 600;
+            color: #0000FF;
+        }
+        
+        .tab.active {
+            background: #FF0000;
+            color: white;
+            border-bottom: 3px solid #0000FF;
+        }
+        
+        .form-container {
+            padding: 30px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #FF0000;
+            font-weight: 600;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #0000FF;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #FF0000;
+            box-shadow: 0 0 0 3px rgba(255, 0, 0, 0.1);
+        }
+        
+        .form-group small {
+            display: block;
+            color: #666;
+            margin-top: 5px;
+            font-size: 0.85em;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #FF0000 0%, #0000FF 100%);
+            color: white;
+            padding: 14px 28px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+            border: 2px solid #FFFFFF;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 0, 0, 0.4);
+        }
+        
+        .message {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+        }
+        
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #0000FF;
+            display: block;
+        }
+        
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 2px solid #FF0000;
+            display: block;
+        }
+        
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #FF0000;
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0000FF;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <h1>🇵🇭 Budget Request System</h1>
+                <p>Please login to continue</p>
+            </div>
+            
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('login')" id="tab-login">Login</div>
+                <div class="tab" onclick="switchTab('register')" id="tab-register">Register</div>
+            </div>
+            
+            <div class="form-container">
+                <!-- Login Form -->
+                <form id="login-form">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="login-username" placeholder="Enter your username" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="login-password" placeholder="Enter your password" required>
+                    </div>
+                    
+                    <button type="submit">Login</button>
+                </form>
+                
+                <!-- Register Form -->
+                <form id="register-form" style="display: none;">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="reg-username" placeholder="Choose a username" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="reg-email" placeholder="your@email.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="reg-fullname" placeholder="Enter your full name" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Campus / Branch</label>
+                        <input type="text" id="reg-campus" placeholder="e.g., Main Campus, North Branch" required>
+                        <small>Enter your specific campus or branch location</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Department</label>
+                        <select id="reg-department" required>
+                            <option value="">Select Department</option>
+                            <option value="Engineering">Engineering</option>
+                            <option value="Marketing">Marketing</option>
+                            <option value="Sales">Sales</option>
+                            <option value="HR">HR</option>
+                            <option value="Finance">Finance</option>
+                            <option value="Operations">Operations</option>
+                            <option value="IT">IT</option>
+                            <option value="Administration">Administration</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Position (Optional)</label>
+                        <input type="text" id="reg-position" placeholder="e.g., Manager, Staff">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Employee ID (Optional)</label>
+                        <input type="text" id="reg-employee-id" placeholder="e.g., EMP-12345">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Contact Number (Optional)</label>
+                        <input type="text" id="reg-contact" placeholder="e.g., 09123456789">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="reg-password" placeholder="Minimum 8 characters" required>
+                        <small>Minimum 8 characters</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Confirm Password</label>
+                        <input type="password" id="reg-confirm" placeholder="Re-enter password" required>
+                    </div>
+                    
+                    <button type="submit">Register</button>
+                </form>
+                
+                <div id="message" class="message"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tab) {
+            if (tab === 'login') {
+                document.getElementById('tab-login').classList.add('active');
+                document.getElementById('tab-register').classList.remove('active');
+                document.getElementById('login-form').style.display = 'block';
+                document.getElementById('register-form').style.display = 'none';
+            } else {
+                document.getElementById('tab-register').classList.add('active');
+                document.getElementById('tab-login').classList.remove('active');
+                document.getElementById('register-form').style.display = 'block';
+                document.getElementById('login-form').style.display = 'none';
+            }
+            document.getElementById('message').style.display = 'none';
+        }
+
+        // Login form submission
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            try {
+                const response = await fetch('/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    localStorage.setItem('token', data.access_token);
+                    localStorage.setItem('role', data.role);
+                    localStorage.setItem('user_id', data.user_id);
+                    localStorage.setItem('username', data.username);
+                    
+                    if (data.role === 'super_admin' || data.role === 'admin') {
+                        window.location.href = '/static/admin.html';
+                    } else {
+                        window.location.href = '/static/requester.html';
+                    }
+                } else {
+                    showMessage(data.detail || 'Login failed', 'error');
+                }
+            } catch (error) {
+                showMessage('Error connecting to server', 'error');
+            }
+        });
+
+        // Register form submission
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const password = document.getElementById('reg-password').value;
+            const confirm = document.getElementById('reg-confirm').value;
+            
+            if (password !== confirm) {
+                showMessage('Passwords do not match', 'error');
+                return;
+            }
+            
+            if (password.length < 8) {
+                showMessage('Password must be at least 8 characters', 'error');
+                return;
+            }
+            
+            const userData = {
+                username: document.getElementById('reg-username').value,
+                email: document.getElementById('reg-email').value,
+                full_name: document.getElementById('reg-fullname').value,
+                campus: document.getElementById('reg-campus').value,
+                department: document.getElementById('reg-department').value,
+                position: document.getElementById('reg-position').value,
+                employee_id: document.getElementById('reg-employee-id').value,
+                contact_number: document.getElementById('reg-contact').value,
+                password: password
+            };
+            
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(userData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Registration successful! Please wait for admin approval.', 'success');
+                    document.getElementById('register-form').reset();
+                    setTimeout(() => switchTab('login'), 3000);
+                } else {
+                    showMessage(data.detail || 'Registration failed', 'error');
+                }
+            } catch (error) {
+                showMessage('Error connecting to server', 'error');
+            }
+        });
+
+        function showMessage(msg, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = msg;
+            messageDiv.className = `message ${type}`;
+            messageDiv.style.display = 'block';
+        }
+
+        // Check if already logged in
+        const token = localStorage.getItem('token');
+        const role = localStorage.getItem('role');
+        
+        if (token && role) {
+            if (role === 'super_admin' || role === 'admin') {
+                window.location.href = '/static/admin.html';
+            } else {
+                window.location.href = '/static/requester.html';
+            }
+        }
+    </script>
+</body>
+</html>

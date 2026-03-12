@@ -22,20 +22,34 @@ logger = logging.getLogger(__name__)
 # ====== CREATE FASTAPI APP ======
 app = FastAPI(title="Budget Request System", version="2.0.0")
 
+# ====== DETECT ENVIRONMENT ======
+on_vercel = os.environ.get('VERCEL', False) or os.path.exists('/var/task')
+logger.info(f"Running on Vercel: {on_vercel}")
+
 # ====== MOUNT STATIC FILES ======
-# Try different paths for static files
-static_paths = ["app/static", "static"]
-mounted = False
-
-for path in static_paths:
-    if os.path.exists(path):
-        app.mount("/static", StaticFiles(directory=path), name="static")
-        logger.info(f"Static files mounted from {path}")
-        mounted = True
-        break
-
-if not mounted:
-    logger.warning("Could not mount static files - no static directory found")
+try:
+    if on_vercel:
+        # On Vercel, files are at /var/task/
+        vercel_static_path = '/var/task/app/static'
+        if os.path.exists(vercel_static_path):
+            app.mount("/static", StaticFiles(directory=vercel_static_path), name="static")
+            logger.info(f"✅ Static files mounted from Vercel path: {vercel_static_path}")
+        else:
+            # Fallback to relative path
+            app.mount("/static", StaticFiles(directory="app/static"), name="static")
+            logger.info("⚠️ Static files mounted from app/static (fallback)")
+    else:
+        # Local development
+        if os.path.exists("app/static"):
+            app.mount("/static", StaticFiles(directory="app/static"), name="static")
+            logger.info("✅ Static files mounted from app/static (local)")
+        elif os.path.exists("static"):
+            app.mount("/static", StaticFiles(directory="static"), name="static")
+            logger.info("✅ Static files mounted from static (local)")
+        else:
+            logger.warning("❌ No static directory found!")
+except Exception as e:
+    logger.error(f"Error mounting static files: {e}")
 
 # ====== CORS MIDDLEWARE ======
 app.add_middleware(
@@ -49,6 +63,19 @@ app.add_middleware(
 # ====== STARTUP EVENT ======
 @app.on_event("startup")
 async def startup_event():
+    # Log directory structure on startup
+    logger.info(f"Current directory: {os.getcwd()}")
+    logger.info(f"Files in current directory: {os.listdir('.')}")
+    
+    if os.path.exists('app'):
+        logger.info(f"Files in app: {os.listdir('app')}")
+    
+    if os.path.exists('app/static'):
+        logger.info(f"Files in app/static: {os.listdir('app/static')}")
+    
+    if os.path.exists('/var/task'):
+        logger.info(f"Files in /var/task: {os.listdir('/var/task')[:10]}")  # First 10 files
+    
     # Create super admin if not exists
     if "superadmin" not in users_db:
         super_admin = User(
@@ -91,16 +118,14 @@ async def startup_event():
         users_db[admin_user.username] = admin_user
         logger.info("Sample admin user created")
 
-# ====== DEBUG ENDPOINT - ADD THIS ======
+# ====== DEBUG ENDPOINT ======
 @app.get("/debug-files")
 async def debug_files():
     """Debug endpoint to see what files are available"""
-    import os
-    
     result = {
+        "environment": "vercel" if on_vercel else "local",
         "current_directory": os.getcwd(),
         "files_in_current": os.listdir('.'),
-        "env_vars": {k: v for k, v in os.environ.items() if "PATH" in k or "DIR" in k}
     }
     
     # Check if app folder exists
@@ -117,50 +142,68 @@ async def debug_files():
     else:
         result["static_in_app_exists"] = False
     
-    # Check if static folder exists in root
-    if os.path.exists('static'):
-        result["root_static_exists"] = True
-        result["files_in_root_static"] = os.listdir('static')
-    else:
-        result["root_static_exists"] = False
+    # Check /var/task path (Vercel)
+    if os.path.exists('/var/task'):
+        result["var_task_exists"] = True
+        result["files_in_var_task"] = os.listdir('/var/task')[:20]  # First 20 files
+    
+    if os.path.exists('/var/task/app/static'):
+        result["var_task_static_exists"] = True
+        result["files_in_var_task_static"] = os.listdir('/var/task/app/static')
     
     return JSONResponse(content=result)
 
 # ====== PAGE ROUTES (HTML) ======
 
+def find_html_file(filename):
+    """Helper function to find HTML files in various possible locations"""
+    possible_paths = []
+    
+    # Add paths based on environment
+    if on_vercel:
+        possible_paths.append(f'/var/task/app/static/{filename}')
+        possible_paths.append(f'/var/task/static/{filename}')
+    
+    # Relative paths
+    possible_paths.append(f'app/static/{filename}')
+    possible_paths.append(f'static/{filename}')
+    possible_paths.append(os.path.join('app', 'static', filename))
+    possible_paths.append(os.path.join(os.getcwd(), 'app', 'static', filename))
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            logger.info(f"Found {filename} at: {path}")
+            return path
+    
+    logger.warning(f"Could not find {filename} in any location")
+    return None
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve the login page"""
-    # Try multiple possible paths
-    possible_paths = [
-        os.path.join("app", "static", "login.html"),
-        os.path.join("static", "login.html"),
-        "static/login.html",
-        "app/static/login.html",
-        os.path.join(os.getcwd(), "app", "static", "login.html"),
-        os.path.join(os.getcwd(), "static", "login.html")
-    ]
+    html_path = find_html_file("login.html")
     
-    for html_path in possible_paths:
-        if os.path.exists(html_path):
-            logger.info(f"Found login.html at: {html_path}")
-            with open(html_path, "r", encoding="utf-8") as f:
-                html_content = f.read()
-            return HTMLResponse(content=html_content)
+    if html_path:
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
     
     # If no file found, return helpful error
     error_html = f"""
     <html>
         <head><title>Error</title></head>
         <body style="font-family: Arial; padding: 20px;">
-            <h1>🔍 Frontend files not found</h1>
-            <p>Current directory: {os.getcwd()}</p>
-            <p>Files in current directory: {os.listdir('.')}</p>
-            <p>Files in ./app: {os.listdir('app') if os.path.exists('app') else 'app folder not found'}</p>
-            <p>Files in ./app/static: {os.listdir('app/static') if os.path.exists('app/static') else 'static folder not found'}</p>
-            <p>Files in ./static: {os.listdir('static') if os.path.exists('static') else 'root static folder not found'}</p>
+            <h1>🔍 Login page not found</h1>
+            <p><strong>Environment:</strong> {"Vercel" if on_vercel else "Local"}</p>
+            <p><strong>Current directory:</strong> {os.getcwd()}</p>
+            <p><strong>Files in current:</strong> {os.listdir('.')}</p>
+            <p><strong>app exists:</strong> {os.path.exists('app')}</p>
+            <p><strong>app/static exists:</strong> {os.path.exists('app/static')}</p>
+            <p><strong>/var/task exists:</strong> {os.path.exists('/var/task')}</p>
             <hr>
             <p><a href="/debug-files">View detailed debug info</a></p>
+            <p><a href="/health">Check API health</a></p>
+            <p><a href="/api">View API endpoints</a></p>
         </body>
     </html>
     """
@@ -169,56 +212,38 @@ async def root():
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
     """Serve the login page"""
-    possible_paths = [
-        os.path.join("app", "static", "login.html"),
-        os.path.join("static", "login.html"),
-        "static/login.html",
-        "app/static/login.html"
-    ]
+    html_path = find_html_file("login.html")
     
-    for html_path in possible_paths:
-        if os.path.exists(html_path):
-            with open(html_path, "r", encoding="utf-8") as f:
-                html_content = f.read()
-            return HTMLResponse(content=html_content)
+    if html_path:
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
     
-    return HTMLResponse(content="<h1>Login page not found</h1>", status_code=404)
+    return HTMLResponse(content="<h1>Login page not found</h1><p><a href='/debug-files'>Debug</a></p>", status_code=404)
 
 @app.get("/requester-dashboard", response_class=HTMLResponse)
 async def requester_page():
     """Serve the requester dashboard page"""
-    possible_paths = [
-        os.path.join("app", "static", "requester.html"),
-        os.path.join("static", "requester.html"),
-        "static/requester.html",
-        "app/static/requester.html"
-    ]
+    html_path = find_html_file("requester.html")
     
-    for html_path in possible_paths:
-        if os.path.exists(html_path):
-            with open(html_path, "r", encoding="utf-8") as f:
-                html_content = f.read()
-            return HTMLResponse(content=html_content)
+    if html_path:
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
     
-    return HTMLResponse(content="<h1>Requester page not found</h1>", status_code=404)
+    return HTMLResponse(content="<h1>Requester page not found</h1><p><a href='/debug-files'>Debug</a></p>", status_code=404)
 
 @app.get("/admin-dashboard", response_class=HTMLResponse)
 async def admin_page():
     """Serve the admin dashboard page"""
-    possible_paths = [
-        os.path.join("app", "static", "admin.html"),
-        os.path.join("static", "admin.html"),
-        "static/admin.html",
-        "app/static/admin.html"
-    ]
+    html_path = find_html_file("admin.html")
     
-    for html_path in possible_paths:
-        if os.path.exists(html_path):
-            with open(html_path, "r", encoding="utf-8") as f:
-                html_content = f.read()
-            return HTMLResponse(content=html_content)
+    if html_path:
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
     
-    return HTMLResponse(content="<h1>Admin page not found</h1>", status_code=404)
+    return HTMLResponse(content="<h1>Admin page not found</h1><p><a href='/debug-files'>Debug</a></p>", status_code=404)
 
 # ====== API ROOT (JSON) ======
 @app.get("/api")
@@ -228,12 +253,16 @@ async def api_root():
         "message": "Budget Request System API",
         "version": "2.0.0",
         "status": "running",
+        "environment": "vercel" if on_vercel else "local",
         "endpoints": {
             "docs": "/docs",
             "health": "/health",
             "stats": "/stats",
             "auth": "/token",
-            "debug": "/debug-files"
+            "debug": "/debug-files",
+            "login_page": "/login",
+            "requester": "/requester-dashboard",
+            "admin": "/admin-dashboard"
         }
     }
 
@@ -619,5 +648,6 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "users": len(users_db),
         "requests": len(budget_requests_db),
-        "version": "2.0.0"
+        "version": "2.0.0",
+        "environment": "vercel" if on_vercel else "local"
     }

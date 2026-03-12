@@ -473,3 +473,27 @@ async def health_check():
         "requests": len(budget_requests_db),
         "version": "2.0.0"
     }
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "users": len(users_db),
+        "requests": len(budget_requests_db),
+        "version": "2.0.0"
+    }
+
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+@app.get("/login")
+async def serve_login():
+    return FileResponse('app/static/login.html')
+
+@app.get("/admin")
+async def serve_admin():
+    return FileResponse('app/static/admin.html')
+
+@app.get("/requester")
+async def serve_requester():
+    return FileResponse('app/static/requester.html')  
